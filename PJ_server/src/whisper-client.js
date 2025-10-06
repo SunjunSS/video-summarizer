@@ -4,10 +4,31 @@ const fs = require('fs');
 const path = require('path');
 
 // URL 변경 필요
-const whisperApiUrl = 'https://mercury-drivers-cos-photographer.trycloudflare.com/stt_multi';
+const whisperApiUrl = 'https://altered-calling-rio-deleted.trycloudflare.com/stt_multi';
 
-// 명령행 인자로 파일명 받기
-const audioFileName = process.argv[2] || 'output_audio.mp3';
+// 명령행 인자로 파일명 받기 (없으면 가장 최신 파일 자동 선택)
+let audioFileName = process.argv[2];
+
+// 인자가 없으면 가장 최신 파일 찾기
+if (!audioFileName) {
+  const files = fs.readdirSync(__dirname);
+  const audioFiles = files.filter(f => /^output_audio\((\d+)\)\.mp3$/.test(f));
+  
+  let maxNumber = 0;
+  audioFiles.forEach(file => {
+    const match = file.match(/^output_audio\((\d+)\)\.mp3$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (num > maxNumber) {
+        maxNumber = num;
+      }
+    }
+  });
+  
+  audioFileName = maxNumber > 0 ? `output_audio(${maxNumber}).mp3` : 'output_audio.mp3';
+  console.error(`📋 자동 선택된 파일: ${audioFileName} (가장 최신)`);
+}
+
 const audioPath = path.join(__dirname, audioFileName);
 
 // 로그 섹션 구분선 출력
@@ -22,6 +43,57 @@ function logSubSection(title) {
   console.error('\n' + '-'.repeat(30));
   console.error(`  ${title}`);
   console.error('-'.repeat(30));
+}
+
+// ✨ .txt 파일 저장 함수 (output_text(N).txt 형식)
+function saveTranscriptToFile(results) {
+  try {
+    // 현재 디렉토리의 모든 output_text(N).txt 파일 찾기
+    const files = fs.readdirSync(__dirname);
+    const textFiles = files.filter(f => /^output_text\((\d+)\)\.txt$/.test(f));
+    
+    // 가장 큰 번호 찾기
+    let maxNumber = 0;
+    textFiles.forEach(file => {
+      const match = file.match(/^output_text\((\d+)\)\.txt$/);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNumber) {
+          maxNumber = num;
+        }
+      }
+    });
+    
+    // 다음 번호 결정
+    const nextNumber = maxNumber + 1;
+    const txtFileName = `output_text(${nextNumber}).txt`;
+    const txtPath = path.join(__dirname, txtFileName);
+    
+    // fullText만 추출해서 저장
+    let content = '';
+    results.forEach((result) => {
+      if (result.fullText) {
+        content += result.fullText;
+        // 여러 발화자가 있으면 줄바꿈으로 구분
+        if (results.length > 1) {
+          content += '\n\n';
+        }
+      }
+    });
+    
+    fs.writeFileSync(txtPath, content.trim(), 'utf-8');
+    
+    console.error(`\n💾 텍스트 파일 저장 완료`);
+    console.error(`   📁 파일명: ${txtFileName}`);
+    console.error(`   📁 파일 경로: ${txtPath}`);
+    console.error(`   📊 파일 크기: ${(fs.statSync(txtPath).size / 1024).toFixed(2)} KB`);
+    console.error(`   📝 텍스트 길이: ${content.trim().length.toLocaleString()} 문자`);
+    
+    return txtPath;
+  } catch (error) {
+    console.error(`❌ .txt 파일 저장 실패: ${error.message}`);
+    return null;
+  }
 }
 
 async function main() {
@@ -118,6 +190,9 @@ async function main() {
     console.error(`🔍 결과 개수: ${Array.isArray(results) ? results.length : 'N/A'}`);
     
     if (results && Array.isArray(results) && results.length > 0) {
+      // ✨ .txt 파일 저장 (output_text(N).txt 형식으로)
+      const txtPath = saveTranscriptToFile(results);
+      
       const firstResult = results[0];
       
       console.error(`\n📋 첫 번째 결과 상세 정보:`);
